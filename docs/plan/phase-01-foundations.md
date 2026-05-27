@@ -42,9 +42,9 @@
 Day 1 - CLI skeleton + `mgit init`
 
 ### Acceptance Criteria
-- [ ] Tạo Go module cho project `mgit`
-- [ ] Tạo `main.go` và command dispatcher bằng `os.Args` hoặc package `flag`
-- [ ] Tạo package `internal/repo`
+- [x] Tạo Go module cho project `mgit`
+- [x] Tạo `main.go` và command dispatcher bằng `os.Args` hoặc package `flag`
+- [x] Tạo package `internal/repo`
 - [ ] Implement hàm tìm repo root bằng cách đi ngược từ current directory để tìm `.mgit`
 - [ ] Implement `mgit init` tạo `.mgit/objects`, `.mgit/refs/heads`, `.mgit/HEAD`
 - [ ] Ghi `.mgit/HEAD` với nội dung `ref: refs/heads/main`
