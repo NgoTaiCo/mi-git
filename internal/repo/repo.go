@@ -16,27 +16,41 @@ type Repository struct {
 type InitOptions struct{}
 
 func FindRoot(start string) (Repository, error) {
+	// tạo 1 biến giữ đường dẫn hiện tại bằng đầu vào là start
 	currentPath := start
 
+	// bắt đầu vòng lặp để đi tìm root với
 	for {
+		// kiểm tra currentPath hiện tại có phải là 1 repo mgit không
+		// trả về 2 biến để kiểm tra
+		// isMGitRepo là biến check có phải repo mgit không, err dùng để check có lỗi gì không
 		isMGitRepo, err := IsRepository(currentPath)
 
+		// err != nil có nghĩa là err chứa lỗi
 		if err != nil {
+			// trả về Repo kèm lỗi không phải mgit repo
 			return Repository{}, fmt.Errorf("not mgit repo at %v: %w", currentPath, err)
 		}
+
+		// nếu biến check current path là repo
 		if isMGitRepo {
+			// trả về 1 struct repo với đủ thông tin
 			return Repository{
 				Worktree: currentPath,
 				MetaDir:  filepath.Join(currentPath, DefaultMetaDir),
 			}, nil
 		}
 
+		// nếu không lỗi lẫn không phải repo thì lên cha tìm tiếp
 		parent := filepath.Dir(currentPath)
 
+		// nếu trỏ lên mà vẫn bằng currenPath, có nghĩa là đã tới root
+		// thì báo lỗi
 		if parent == currentPath {
 			return Repository{}, fmt.Errorf("repository not found")
 		}
 
+		// sau cùng là sẽ đặt lại currentPath là parent để bắt đầu 1 loop mới
 		currentPath = parent
 	}
 }
