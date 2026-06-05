@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"minigit/internals/repo"
+	"minigit/internal/repo"
 )
 
 func run(args []string) int {
