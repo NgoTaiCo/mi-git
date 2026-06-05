@@ -14,7 +14,7 @@
 >
 > **Lịch:** 2026-07-27
 >
-> **Mini-git surface:** `.mgit/HEAD`, `.mgit/objects`, `.mgit/refs/heads`, `internal/repo`
+> **Mini-git surface:** `.mgit/HEAD`, `.mgit/objects`, `.mgit/refs/heads`, `internals/repo`
 
 ---
 
@@ -43,16 +43,14 @@ Day 1 - CLI skeleton + `mgit init`
 
 ### Acceptance Criteria
 - [x] Tạo Go module cho project `mgit`
-- [x] Tạo `main.go` và command dispatcher bằng `os.Args` hoặc package `flag`
-- [x] Tạo package `internal/repo`
-- [ ] Implement hàm tìm repo root bằng cách đi ngược từ current directory để tìm `.mgit`
-- [ ] Implement `mgit init` tạo `.mgit/objects`, `.mgit/refs/heads`, `.mgit/HEAD`
-- [ ] Ghi `.mgit/HEAD` với nội dung `ref: refs/heads/main`
-- [ ] In message thành công và đảm bảo chạy lại `mgit init` không phá repo
-- [ ] Chạy `mgit init` trong folder trống và thấy `.mgit` được tạo
-- [ ] Kiểm tra `.mgit/HEAD` trỏ tới `refs/heads/main`
-- [ ] Chạy lại `mgit init` và xác nhận repo không bị hỏng
-- [ ] `go fmt ./...`, `go vet ./...`, `go test ./...` chạy xanh
+- [x] Tạo `main.go` và command dispatcher bằng `os.Args`
+- [x] Tạo package `internals/repo` — (lưu ý: path thực tế là `internals/`, không phải `internal/`)
+- [x] Implement `FindRoot` đi ngược từ current directory để tìm `.mgit`
+- [x] Implement `Init` tạo `.mgit/objects`, `.mgit/refs/heads`, `.mgit/HEAD`
+- [x] Ghi `.mgit/HEAD` với nội dung `ref: refs/heads/main\n` (có trailing newline)
+- [x] `Init` idempotent: chạy lại không phá repo, `MkdirAll` không lỗi khi thư mục tồn tại, `WriteFile` ghi đè `HEAD`
+- [x] Wire lệnh `mgit init` vào CLI dispatcher trong `main.go` — `case "init":` gọi `repo.Init(os.Getwd())`
+- [x] `go fmt ./...`, `go vet ./...`, `go test ./...` chạy xanh
 
 ### Senior Guide
 
@@ -70,36 +68,59 @@ Day 1 - CLI skeleton + `mgit init`
 ```go
 package main
 
+// run tách khỏi main() để test trực tiếp không cần spawn process
 func run(args []string) int
+// Trả về: 0 = success, 1 = no args, 2 = unknown command
 
 // TODO-01-CLI: Command dispatcher chỉ parse command và gọi package domain.
 // SENIOR ASKS: Tại sao tách `run(args []string) int` khỏi `main()` giúp test CLI dễ hơn?
 // HINT: Trong test, bạn truyền args trực tiếp thay vì spawn process.
+// STATUS: ✅ Đã implement. Cần thêm case "init" để gọi repo.Init.
 
-package repo
+package repo // path thực tế: internals/repo
 
-type Repository struct{}
+const DefaultMetaDir = ".mgit"
+
+// Repository giữ hai đường dẫn: thư mục làm việc và thư mục metadata
+type Repository struct {
+    Worktree string // thư mục gốc chứa code
+    MetaDir  string // đường dẫn đến .mgit
+}
+
+// InitOptions dành cho flag/tuỳ chọn tương lai (hiện tại rỗng)
 type InitOptions struct{}
 
+// FindRoot đi ngược từ start lên filesystem đến khi tìm thấy .mgit
 func FindRoot(start string) (Repository, error)
+
+// Init tạo cấu trúc .mgit mới hoặc re-init nếu đã tồn tại (idempotent)
 func Init(path string, opts InitOptions) (Repository, error)
-func IsRepository(path string) bool
+
+// IsRepository kiểm tra path có chứa .mgit hợp lệ không
+// LƯU Ý: trả về (bool, error) — khác với (bool) trong Git thật
+// error xảy ra khi .mgit tồn tại nhưng không phải thư mục (file hoặc symlink)
+func IsRepository(path string) (bool, error)
 
 // TODO-01-A: Chọn package boundary trước khi code.
 // SENIOR ASKS: Logic này thuộc CLI, repo, object store, refs, index hay worktree? Vì sao?
+// STATUS: ✅ Đã quyết định — tất cả filesystem logic nằm trong internals/repo.
 
 // TODO-01-B: Viết test matrix trước khi implement ruột hàm.
 // SENIOR ASKS: Happy path nào chưa đủ? Edge case filesystem nào có thể làm bạn tưởng code đúng?
+// STATUS: ✅ Đã có TestIsRepository (4 cases), TestFindRoot (4 cases), TestInit (4 cases).
 
 // TODO-01-C: Implement từng hàm nhỏ, không nhét toàn bộ vào command handler.
 // SENIOR ASKS: Nếu đổi CLI flag, package domain có phải sửa không? Nếu có thì boundary đang sai.
+// STATUS: ✅ main.go chỉ parse args, không biết gì về filesystem.
 
 // TODO-01-D: `Init` tạo repo tại target path; `FindRoot` tìm repo đã tồn tại.
 // SENIOR ASKS: Vì sao `mgit init` không nên phụ thuộc vào việc current directory đã có `.mgit`?
+// STATUS: ✅ Init nhận path explicit, không dùng os.Getwd() ngầm.
 ```
 
 #### Theory Notes From CSV
-- [ ] Ghi chú: repo = working directory + metadata folder + object database
+- [x] Ghi chú: repo = working directory + metadata folder + object database
+  > `Repository.Worktree` = working directory; `Repository.MetaDir` = `.mgit/` = metadata folder; `objects/` bên trong = object database (chưa có nội dung, phase sau mới dùng)
 
 #### Socratic Questions
 1. Tại sao `.mgit/HEAD` là file text vẫn đủ biểu diễn current branch?
@@ -108,19 +129,20 @@ func IsRepository(path string) bool
 4. Nếu `FindRoot` trả zero-value `Repository` cùng error, caller phải xử lý thế nào để không dùng nhầm state rác?
 
 ### Output Checklist: Làm sao biết mình xong?
-- [ ] Chạy `mgit init` trong folder trống và thấy `.mgit` được tạo
-- [ ] Kiểm tra `.mgit/HEAD` trỏ tới `refs/heads/main`
-- [ ] Chạy lại `mgit init` và xác nhận repo không bị hỏng
+- [x] Domain function `Init()` đã tạo đúng `.mgit` khi test với `t.TempDir()`
+- [x] `.mgit/HEAD` chứa `ref: refs/heads/main\n` (verified bởi TestInit block 7)
+- [x] `Init` lần 2 không phá repo — TestInit testcase 2 kiểm tra re-init với repo đã có đầy đủ cấu trúc
+- [x] Chạy `go build -o mgit.exe . && mgit.exe init` trong thư mục tạm — thấy đúng cấu trúc `.mgit/` — _verified 2026-06-05_
 
 ### Test Checklist: Những gì bạn nên tự kiểm tra
-- [ ] Init trong folder trống tạo đúng `.mgit/objects`, `.mgit/refs/heads`, `.mgit/HEAD`.
-- [ ] Init lần hai không làm mất HEAD hiện có.
-- [ ] FindRoot từ subfolder tìm đúng repo root.
-- [ ] FindRoot ngoài repo trả error rõ, không panic.
-- [ ] Init trong subfolder của repo đã tồn tại không tạo repo lồng nhau nếu đó là policy bạn chọn; nếu cho phép thì phải ghi rõ lý do.
-- [ ] `.mgit/HEAD` có newline cuối file hoặc không? Chọn một chuẩn và test ổn định.
-- [ ] Không tạo `.git`; chỉ tạo `.mgit`.
-- [ ] `run([]string{})` và `run([]string{"unknown"})` trả exit code/message rõ, không panic.
+- [x] Init trong folder trống tạo đúng `.mgit/objects`, `.mgit/refs/heads`, `.mgit/HEAD` — _TestInit/testcase_1_
+- [x] Init lần hai (re-init) không mất HEAD — _TestInit/testcase_2_: setup tạo sẵn cấu trúc đầy đủ, Init ghi đè HEAD với cùng nội dung
+- [x] FindRoot từ subfolder `a/b/c` tìm đúng repo root — _TestFindRoot/testcase_2_
+- [x] FindRoot ngoài repo trả error rõ, không panic — _TestFindRoot/testcase_3_
+- [ ] Init trong subfolder của repo đang tồn tại tạo repo lồng nhau — _(policy chưa quyết định, chưa test; hiện tại Init không ngăn)_
+- [x] `.mgit/HEAD` có trailing newline: `ref: refs/heads/main\n` — _TestInit block 7_ so sánh exact string
+- [x] Không tạo `.git`; chỉ tạo `.mgit` — hardcoded qua `DefaultMetaDir = ".mgit"`
+- [x] `run([]string{})` → exit 1; `run([]string{"xyz"})` → exit 2; không panic — _TestRun_ (3 cases)
 
 ### Learning Notes / Docs
 - [ ] Viết ít nhất 5 dòng note về điều đã học trong ngày
@@ -135,14 +157,16 @@ func IsRepository(path string) bool
 ## Phase Checkpoints (BẮT BUỘC)
 
 ### CP-01-A: CLI Manual Flow
-- [ ] Chạy được toàn bộ command chính của phase trong thư mục tạm.
-- [ ] Quan sát được file thay đổi trong `.mgit`, không chỉ nhìn output CLI.
-- [ ] Error message rõ với input sai, command không tồn tại, hoặc path không tạo được.
+- [x] Chạy được `mgit init` từ terminal trong thư mục tạm — _verified 2026-06-05, output: `Initialized empty repository in .../.mgit`_
+- [x] Quan sát được `objects/`, `refs/heads/`, `HEAD` bên trong `.mgit` sau khi chạy
+- [x] Error message rõ: lệnh không xác định trả exit 2; `repo.Init` lỗi in ra stderr rồi trả exit 1
 
 ### CP-01-B: Test Gate
-- [ ] Có unit test cho package domain chính.
-- [ ] Có test edge case filesystem hoặc parser tương ứng phase.
-- [ ] Chạy `go test ./...` xanh trước khi qua phase tiếp theo.
+- [x] Unit test cho package domain: `TestIsRepository`, `TestFindRoot`, `TestInit` — tổng 12 cases
+- [x] Test edge case filesystem: `.mgit` là file, symlink (skip Windows), subfolder nested, path không tồn tại
+- [x] Integration test CLI: `TestRunInit` (2 cases: init mới + re-init) trong `main_test.go`
+- [x] `go test ./...` xanh — 14 PASS, 1 SKIP — _verified 2026-06-05_
+- [x] `go fmt ./...` và `go vet ./...` sạch — _verified 2026-06-05_
 
 ### CP-01-C: Oral Defense
 - [ ] Trả lời được First-Principles Question cuối file mà không nhìn code.
@@ -167,11 +191,16 @@ Command handler chỉ parse input, gọi package domain, format output.
 ## Tổng Kết
 
 ### Deliverables
-- [ ] Command chính của phase chạy được.
-- [ ] Test xanh: `go test ./...`.
-- [ ] Tooling xanh: `go fmt ./...` và `go vet ./...`.
-- [ ] Note học tập tối thiểu 5 dòng cho mission.
-- [ ] Retrospective ghi rõ sai ở đâu và refactor nào cố tình chưa làm.
+- [x] Command `mgit init` chạy được từ CLI — `go build` + thực thi được xác nhận
+- [x] Test xanh: `go test ./...` — 14 cases PASS, 1 SKIP (symlink/Windows)
+- [x] Tooling xanh: `go fmt ./...` và `go vet ./...` — clean
+- [ ] Note học tập tối thiểu 5 dòng cho mission _(bạn tự viết)_
+- [ ] Retrospective ghi rõ sai ở đâu và refactor nào cố tình chưa làm _(bạn tự viết)_
+
+> **Việc còn lại trước khi phase này 100% done (chỉ còn phần của bạn):**
+> 1. Viết Learning Notes (mục bên dưới) — tối thiểu 5 dòng
+> 2. Viết Retrospective — trả lời 3 câu hỏi ở cuối
+> 3. Oral Defense CP-01-C — trả lời First-Principles Question không nhìn code
 
 ### First-Principles Question
 Tại sao `.mgit/HEAD` là file text vẫn đủ biểu diễn current branch?

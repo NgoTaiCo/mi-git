@@ -1,6 +1,11 @@
 package main
 
-import "os"
+import (
+	"fmt"
+	"os"
+
+	"minigit/internals/repo"
+)
 
 func run(args []string) int {
 	if len(args) == 0 {
@@ -9,11 +14,28 @@ func run(args []string) int {
 
 	switch args[0] {
 	case "help":
+		// lệnh help thành công
 		return 0
-	case "unknown":
-		return 2
+
+	case "init":
+		// lấy thư mục hiện tại làm target của init
+		cwd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: không lấy được current directory: %v\n", err)
+			return 1
+		}
+		// gọi domain function, không viết filesystem logic ở đây
+		r, err := repo.Init(cwd, repo.InitOptions{})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return 1
+		}
+		fmt.Printf("Initialized empty repository in %s\n", r.MetaDir)
+		return 0
+
 	default:
-		return 1
+		// mọi lệnh không xác định đều trả về exit code 2
+		return 2
 	}
 }
 
